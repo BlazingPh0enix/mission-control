@@ -29,13 +29,6 @@ tmp/
 temp/
 *.tmp
 
-# Dependency lockfiles
-package-lock.json
-yarn.lock
-pnpm-lock.yaml
-bun.lockb
-uv.lock
-
 # Virtual environments
 venv/
 .venv/
