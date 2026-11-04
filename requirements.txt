@@ -1,0 +1,13 @@
+openai
+httpx
+pydantic
+python-dotenv
+tenacity
+rank-bm25
+ddgs
+beautifulsoup4
+trafilatura
+svgwrite
+gradio
+pytest
+ruff
