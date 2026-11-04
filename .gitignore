@@ -1,0 +1,40 @@
+node_modules/
+dist/
+build/
+coverage/
+.next/
+.nuxt/
+.cache/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+logs/
+
+# Local tooling
+.vscode/
+.idea/
+*.swp
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Dependency lockfiles
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+bun.lockb
+uv.lock
+
+# Virtual environments
+venv/
