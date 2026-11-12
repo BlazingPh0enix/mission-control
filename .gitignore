@@ -1,0 +1,18 @@
+# Secrets
+.env
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# Local databases and downloads (parts.db comes from the HF dataset)
+data/*
+!data/.gitkeep
+
+# Game files must never be committed
+GameData/
+*.ConfigCache
+*.craft

@@ -1,0 +1,45 @@
+[project]
+name = "kerbal-copilot"
+version = "0.1.0"
+description = "AI build assistant for Kerbal Space Program"
+requires-python = ">=3.12"
+dependencies = [
+    "gradio==6.31.0",  # keep equal to sdk_version in README.md
+    "openai>=1.40",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+    "httpx>=0.27",
+    "huggingface_hub>=0.24",
+    "tavily-python",
+    "trafilatura",
+]
+
+[project.optional-dependencies]
+turso = ["libsql"]
+dev = ["pytest>=8", "ruff>=0.15"]
+desktop = ["mss", "pillow", "keyboard", "krpc"]
+
+[project.scripts]
+kerbal-copilot = "kerbal_copilot.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/kerbal_copilot"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+# Explicit rule set so new ruff releases don't change what CI checks
+select = ["E", "F", "W", "I", "B", "UP"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["kerbal_copilot"]
