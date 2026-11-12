@@ -6,6 +6,9 @@ coverage/
 .nuxt/
 .cache/
 
+# Cache and lock files
+__pycache__/
+
 # Environment and secrets
 .env
 .env.*
@@ -32,3 +35,6 @@ temp/
 # Virtual environments
 venv/
 .venv/
+
+# Raw Gamedata
+data/raw
