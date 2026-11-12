@@ -16,6 +16,7 @@ class Part(BaseModel):
     mass_t: float
     cost: float = 0
     tech_required: str | None = None
+    description: str | None = None
     roles: list[str] = Field(default_factory=list)
     resources: dict[str, float] = Field(default_factory=dict)
     engine: EngineStats | None = None

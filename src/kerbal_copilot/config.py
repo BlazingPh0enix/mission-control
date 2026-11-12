@@ -1,3 +1,4 @@
+from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from dotenv import load_dotenv
 import os
@@ -15,6 +16,7 @@ class Settings(BaseSettings):
     turso_auth_token: str | None = None
     hf_token: str | None = None
     hf_data_repo: str = "you/kerbal-copilot-data"
+    data_dir: Path = Path("data")
     preferred_models: list[str] = [
         "google/gemma-4-31b-it:free",
         "google/gemma-4-26b-a4b-it:free",
