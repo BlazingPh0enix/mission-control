@@ -1,5 +1,6 @@
-"""Command line: kerbal-copilot ingest | pull-data | search"""
+"""Command line: kerbal-copilot ingest | pull-data | search | ask | eval"""
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -81,6 +82,43 @@ def cmd_search(args) -> None:
               f"{p['mass_t']:>6} t{engine}")
 
 
+def cmd_ask(args) -> None:
+    from .agent import Agent
+
+    agent = Agent.from_env()
+    text, build, report = agent.run(args.prompt, [])
+    print(text)
+    if report:
+        print("\n--- evaluated by Python ---")
+        for s in report.stages:
+            print(f"{s.label:<28} {s.dv_vac:>8,.0f} m/s vac   TWR {s.twr_start:>5.2f}   "
+                  f"{s.burn_time_s:>6.0f} s")
+        print(f"Total {report.total_dv_vac:,.0f} m/s, launch TWR {report.launch_twr:.2f}")
+        for warning in report.warnings:
+            print("WARNING:", warning)
+    print(agent.quota_text())
+
+
+def cmd_eval(args) -> None:
+    from .agent import Agent
+
+    agent = Agent.from_env()
+    cases = json.loads(Path(args.file).read_text(encoding="utf-8"))
+    failed = 0
+    for case in cases:
+        _text, build, report = agent.run(case["prompt"], [])
+        checks = {
+            "has_build": build is not None,
+            "evaluates": report is not None,
+            "launch_twr": bool(report) and report.launch_twr >= case.get("min_launch_twr", 1.2),
+            "delta_v": bool(report) and report.total_dv_vac >= case.get("min_dv", 0),
+        }
+        ok = all(checks.values())
+        failed += not ok
+        print("PASS" if ok else "FAIL", case["prompt"][:60], checks)
+    sys.exit(1 if failed else 0)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="kerbal-copilot")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -101,6 +139,14 @@ def main() -> None:
     search.add_argument("--role", help="engine, tank, command, decoupler, ...")
     search.add_argument("--limit", type=int, default=15)
     search.set_defaults(func=cmd_search)
+
+    ask = sub.add_parser("ask", help="Ask the agent one question in the terminal")
+    ask.add_argument("prompt")
+    ask.set_defaults(func=cmd_ask)
+
+    ev = sub.add_parser("eval", help="Run agent evals (spends model quota)")
+    ev.add_argument("--file", default="tests/evals/basic.json")
+    ev.set_defaults(func=cmd_eval)
 
     args = parser.parse_args()
     args.func(args)

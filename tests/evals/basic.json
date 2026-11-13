@@ -1,0 +1,5 @@
+[
+  {"prompt": "Design a cheap rocket that reaches a stable 80 km Kerbin orbit with a one-kerbal pod.", "min_dv": 3400, "min_launch_twr": 1.2},
+  {"prompt": "Design a Mun landing and return mission for one kerbal.", "min_dv": 6000, "min_launch_twr": 1.2},
+  {"prompt": "Design a Minmus landing and return mission for one kerbal.", "min_dv": 5000, "min_launch_twr": 1.2}
+]
