@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     ]
         # Tried only after every free model has failed. Put the most reliable one first.
     paid_models: list[str] = [
-        "google/gemma-4-26b-a4b-it"
+        "google/gemma-4-26b-a4b-it",
         "openai/gpt-oss-20b",
         "google/gemini-2.5-flash-lite"
     ]
