@@ -39,3 +39,12 @@ def test_tables_from_state(parts_db):
     assert [r[0] for r in rows] == ["Boosters", "Core"]
     assert "Launch TWR" in tables.summary_md(state)
     assert tables.stage_rows(None) == [] and tables.summary_md(None) == ""
+
+
+def test_every_part_is_named_in_the_diagram(parts_db):
+    svg = render_svg(BUILD, evaluate(BUILD, parts_db), parts_db)
+    for ref in (*BUILD.payload, *BUILD.stages[0].parts, *BUILD.stages[1].parts):
+        part = parts_db.get(ref.name)
+        assert part.title in svg and part.name in svg  # label text and hover tooltip
+    assert "2x Test Tank" in svg  # radial pair is labelled with its count
+    assert "<script" not in svg

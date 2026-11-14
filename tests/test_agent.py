@@ -92,3 +92,38 @@ def test_extract_build_handles_missing_and_invalid_json():
     assert extract_build("no json here") == (None, None)
     build, error = extract_build('```json\n{"name": "x"}\n```')
     assert build is None and "invalid" in error
+
+
+ERNIE_TEXT = """I need a couple more parts before finalizing.<ernie:tool_call>
+<invoke name="search_parts"><parameter name="query">liquid fuel engine</parameter>
+<parameter name="role">engine</parameter><parameter name="limit">3</parameter></invoke>
+<invoke name="get_part"><parameter name="name">testTank</parameter></invoke>
+</ernie:tool_call>"""
+
+
+def test_tool_calls_written_as_text_are_executed(run_with):
+    result = run_with([
+        reply(ERNIE_TEXT),
+        reply(final(GOOD_BUILD)),
+    ])
+    assert result.build is not None
+    sent = result.seen[1]
+    assistant = next(m for m in sent if m.get("tool_calls"))
+    assert "ernie" not in assistant["content"] and "invoke" not in assistant["content"]
+    calls = [tc["function"] for tc in assistant["tool_calls"]]
+    assert [c["name"] for c in calls] == ["search_parts", "get_part"]
+    assert json.loads(calls[0]["arguments"]) == {"query": "liquid fuel engine",
+                                                 "role": "engine", "limit": 3}
+    assert [m["role"] for m in sent[-2:]] == ["tool", "tool"]
+
+
+def test_json_style_text_call_and_plain_text_untouched(run_with):
+    text = ('<tool_call>{"name": "mission_budget", '
+            '"arguments": {"mission": "mun flyby"}}</tool_call>')
+    result = run_with([reply(text), reply("Use about 4,500 m/s.")])
+    assert "total_dv" in result.seen[1][-1]["content"]
+    assert result.text == "Use about 4,500 m/s."
+    plain = run_with([reply("Mention <invoke> in prose, no call.")])
+    assert plain.text == "Mention <invoke> in prose, no call."
+    ghost = run_with([reply('<tool_call>{"name":"nope","arguments":{}}</tool_call>')])
+    assert "nope" in ghost.text  # unknown tool names are not executed
