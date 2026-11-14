@@ -13,3 +13,30 @@ jobs:
       - run: uv sync --extra dev
       - run: uv run ruff check .
       - run: uv run pytest -q
+
+  deploy:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Upload to Hugging Face Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_SPACE: ${{ vars.HF_SPACE }}
+        run: |
+          pip install huggingface_hub
+          python - <<'EOF'
+          import os
+          from huggingface_hub import HfApi
+          # Only what the Space runs. delete_patterns drops files you removed from the repo.
+          HfApi(token=os.environ["HF_TOKEN"]).upload_folder(
+              folder_path=".", repo_id=os.environ["HF_SPACE"], repo_type="space",
+              commit_message=f"Deploy {os.environ['GITHUB_SHA'][:7]}",
+              allow_patterns=["app.py", "README.md", "requirements.txt", "src/*", "knowledge/*"],
+              delete_patterns=["src/*", "knowledge/*"],
+          )
+          EOF

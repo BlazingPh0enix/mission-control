@@ -1,0 +1,9 @@
+# What the Hugging Face Space installs. Gradio itself comes from sdk_version in README.md.
+openai>=1.40
+pydantic>=2.7
+pydantic-settings>=2.3
+httpx>=0.27
+huggingface_hub>=0.24
+libsql
+tavily-python
+trafilatura
