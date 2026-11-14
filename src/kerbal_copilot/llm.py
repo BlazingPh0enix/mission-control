@@ -104,7 +104,9 @@ def chat(messages, tools=None, chain=None, usage=None, max_models: int = 4, **kw
             errors.append(f"{model}: rate limited")
         except APIStatusError as exc:
             if exc.status_code == 402:
-                raise RuntimeError("OpenRouter returned 402: the credit balance is negative.") from exc
+                raise RuntimeError(
+                    "OpenRouter returned 402: the credit balance is negative."
+                    ) from exc
             errors.append(f"{model}: HTTP {exc.status_code}")
         except (APIConnectionError, EmptyReply) as exc:
             errors.append(str(exc))
