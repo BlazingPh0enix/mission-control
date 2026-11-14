@@ -5,12 +5,19 @@ from html import escape
 from ..models import Build, BuildReport
 
 WIDTH = {"size0": 24, "size1": 36, "size1p5": 46, "size2": 56, "size3": 76, "size4": 96}
+# Translucent fills read well on both light and dark pages
 FILL = {
-    "tank": ("#E1F5EE", "#0F6E56"),
-    "engine": ("#FAECE7", "#993C1D"),
-    "other": ("#F1EFE8", "#5F5E5A"),
+    "tank": ("#10b981", "#059669"),
+    "engine": ("#f97316", "#ea580c"),
+    "other": ("#94a3b8", "#64748b"),
 }
-CX, LABEL_X, TOP = 170, 320, 30
+VIEW_W, CX, TOP = 860, 380, 30
+STAGE_X, PART_X = 24, 560  # stage summaries on the left, part names on the right
+LINE_H, MAX_LABEL = 17, 46
+STYLE = (
+    "<style>.t{fill:var(--body-text-color,#1f2937)}.m{fill:var(--body-text-color-subdued,#6b7280)}"
+    ".k{stroke:var(--body-text-color-subdued,#9ca3af)}</style>"
+)
 
 
 def _role(part) -> str:
@@ -28,7 +35,7 @@ def _height(part, role: str) -> float:
 
 def _shape(role: str, x: float, y: float, w: float, h: float) -> str:
     fill, stroke = FILL.get(role, FILL["other"])
-    style = f'fill="{fill}" stroke="{stroke}" stroke-width="0.8"'
+    style = f'fill="{fill}" fill-opacity="0.22" stroke="{stroke}" stroke-width="1.2"'
     if role == "engine":
         pts = (f"{x + w * 0.2:.1f},{y:.1f} {x + w * 0.8:.1f},{y:.1f} "
                f"{x + w:.1f},{y + h:.1f} {x:.1f},{y + h:.1f}")
@@ -45,26 +52,53 @@ def _subtitle(result) -> str:
     return f"{result.dv_vac:,.0f} m/s · TWR {result.twr_start:.2f}"
 
 
+def _part_text(part, qty: int) -> str:
+    """'2x Title' in the main colour, then the internal name dimmed, cut to fit."""
+    title = part.title or part.name
+    plain = (f"{qty}x " if qty > 1 else "") + title
+    if len(plain) > MAX_LABEL:
+        return escape(plain[:MAX_LABEL - 1]) + "…"
+    room = MAX_LABEL - len(plain) - 1
+    if part.title and part.title != part.name and room >= 6:
+        name = part.name if len(part.name) <= room else part.name[:room - 1] + "…"
+        return f'{escape(plain)} <tspan class="m" font-size="11">{escape(name)}</tspan>'
+    return escape(plain)
+
+
 def render_svg(build: Build, report: BuildReport | None, db) -> str:
     shapes: list[str] = []
     labels: list[str] = []
     results = {r.label: r for r in (report.stages if report else [])}
     y = float(TOP)
-    last_label_y = -100.0
+    last_stage_y = -100.0
+    last_part_y = -100.0
 
-    def add_label(title: str, subtitle: str, top: float, bottom: float, edge: float) -> None:
-        nonlocal last_label_y
+    def add_stage_label(title: str, subtitle: str, top: float, bottom: float, left: float) -> None:
+        nonlocal last_stage_y
         mid = (top + bottom) / 2
-        ly = max(mid, last_label_y + 38)
-        last_label_y = ly
+        ly = max(mid, last_stage_y + 38)
+        last_stage_y = ly
+        bx = left - 14
         labels.append(
-            f'<path d="M{edge + 8:.1f} {mid:.1f} L{LABEL_X - 8} {ly:.1f}" fill="none" '
-            f'stroke="#888780" stroke-width="0.6" stroke-dasharray="3 3"/>'
-            f'<text x="{LABEL_X}" y="{ly - 4:.1f}" font-size="14" font-weight="500" '
-            f'fill="#2C2C2A">{escape(title)}</text>'
-            f'<text x="{LABEL_X}" y="{ly + 13:.1f}" font-size="12" fill="#5F5E5A">'
-            f"{escape(subtitle)}</text>"
+            f'<path d="M{bx + 4:.1f} {top:.1f} H{bx:.1f} V{bottom:.1f} H{bx + 4:.1f}" fill="none" '
+            f'class="k" stroke-width="1"/>'
+            f'<text x="{bx - 8:.1f}" y="{ly - 3:.1f}" text-anchor="end" font-size="14" '
+            f'font-weight="600" class="t">{escape(title)}</text>'
+            f'<text x="{bx - 8:.1f}" y="{ly + 13:.1f}" text-anchor="end" font-size="12" '
+            f'class="m">{escape(subtitle)}</text>'
         )
+
+    def add_part_labels(items: list[tuple[float, float, str]]) -> None:
+        """items: (y of the part, x of its right edge, label). Spread so none overlap."""
+        nonlocal last_part_y
+        for target, edge, text in sorted(items):
+            ly = max(target, last_part_y + LINE_H)
+            last_part_y = ly
+            labels.append(
+                f'<path d="M{edge + 3:.1f} {target:.1f} L{PART_X - 8} {ly:.1f}" fill="none" '
+                f'class="k" stroke-width="0.7" stroke-dasharray="2 3"/>'
+                f'<text x="{PART_X}" y="{ly + 4:.1f}" font-size="13" class="t">{text}</text>'
+            )
 
     def draw_group(refs, title: str, subtitle: str) -> None:
         nonlocal y
@@ -72,28 +106,34 @@ def render_svg(build: Build, report: BuildReport | None, db) -> str:
         radial = [r for r in refs if r.placement == "radial"]
         core_w = max((WIDTH.get(db.get(r.name).size or "", 36) for r in stack), default=36)
         top = y
+        items: list[tuple[float, float, str]] = []
         for ref in stack:
             part = db.get(ref.name)
             role = _role(part)
             w, h = WIDTH.get(part.size or "", 36), _height(part, role)
+            block_top = y
             for _ in range(ref.qty):
-                shapes.append(_shape(role, CX - w / 2, y, w, h))
+                shapes.append(f"<g><title>{escape(part.title or part.name)} "
+                              f"({escape(part.name)})</title>"
+                              f"{_shape(role, CX - w / 2, y, w, h)}</g>")
                 y += h + 1
+            items.append(((block_top + y - 1) / 2, CX + w / 2, _part_text(part, ref.qty)))
         ry, edge = top, CX + core_w / 2
         for ref in radial:
             part = db.get(ref.name)
             role = _role(part)
             w, h = WIDTH.get(part.size or "", 24), _height(part, role)
             for side in (-1, 1):
-                shapes.append(_shape(role, CX + side * (core_w / 2 + 4 + w / 2) - w / 2, ry, w, h))
+                x = CX + side * (core_w / 2 + 4 + w / 2) - w / 2
+                shapes.append(f"<g><title>{escape(part.title or part.name)} "
+                              f"({escape(part.name)})</title>{_shape(role, x, ry, w, h)}</g>")
+            right = CX + core_w / 2 + 4 + w
+            items.append((ry + h / 2, right, _part_text(part, ref.qty)))
             ry += h + 1
-            edge = max(edge, CX + core_w / 2 + 4 + w)
-        if radial and max(r.qty for r in radial) > 2:
-            count = max(r.qty for r in radial)
-            shapes.append(f'<text x="{edge + 4:.1f}" y="{top + 12:.1f}" font-size="12" '
-                          f'fill="#5F5E5A">x{count}</text>')
-        y = max(y, ry) + 6
-        add_label(title, subtitle, top, y - 6, edge)
+            edge = max(edge, right)
+        y = max(y, ry) + 8
+        add_part_labels(items)
+        add_stage_label(title, subtitle, top, y - 8, CX - (edge - CX))
 
     if build.payload:
         draw_group(build.payload, "Payload", "Not staged")
@@ -115,18 +155,18 @@ def render_svg(build: Build, report: BuildReport | None, db) -> str:
         if refs:
             draw_group(refs, title, sub)
 
-    height = max(y, last_label_y + 30) + 40
+    height = max(y, last_stage_y + 30, last_part_y + 20) + 40
     ly = height - 18
     legend = "".join(
-        f'<rect x="{x}" y="{ly - 10:.0f}" width="12" height="12" rx="2" fill="{f}" '
-        f'stroke="{s}" stroke-width="0.8"/>'
-        f'<text x="{x + 18}" y="{ly:.0f}" font-size="12" fill="#5F5E5A">{t}</text>'
-        for x, t, (f, s) in ((40, "Fuel tanks", FILL["tank"]), (150, "Engines", FILL["engine"]),
-                             (250, "Pods, decouplers, other", FILL["other"]))
+        f'<rect x="{x}" y="{ly - 10:.0f}" width="12" height="12" rx="3" fill="{f}" '
+        f'fill-opacity="0.22" stroke="{s}" stroke-width="1.2"/>'
+        f'<text x="{x + 18}" y="{ly:.0f}" font-size="12" class="m">{t}</text>'
+        for x, t, (f, s) in ((STAGE_X, "Fuel tanks", FILL["tank"]),
+                             (STAGE_X + 100, "Engines", FILL["engine"]),
+                             (STAGE_X + 190, "Pods, decouplers, other", FILL["other"]))
     )
-    return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 {height:.0f}" '
-            f'width="100%" font-family="sans-serif">'
-            f'<rect width="680" height="{height:.0f}" fill="#FFFFFF"/>'
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {VIEW_W} {height:.0f}" '
+            f'width="100%" font-family="Inter, system-ui, sans-serif">{STYLE}'
             + "".join(shapes) + "".join(labels) + legend + "</svg>")
 
 

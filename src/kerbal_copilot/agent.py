@@ -13,6 +13,7 @@ from .parts.db import PartsDB, ensure_parts_db
 from .storage.user_db import UserDB
 from .tools import delta_v
 from .tools.registry import make_tools, tool_schemas
+from .tools.textcalls import recover_tool_calls
 
 PROMPT_PATH = Path(__file__).parent / "prompts" / "system.md"
 JSON_BLOCK = re.compile(r"```json\s*(\{.*?\})\s*```", re.DOTALL | re.IGNORECASE)
@@ -80,21 +81,24 @@ class Agent:
     def _loop(self, messages: list[dict], steps: int) -> str:
         for _ in range(steps):
             msg = llm.chat(messages, tools=self.schemas, usage=self.user_db).choices[0].message
-            if not msg.tool_calls:
-                messages.append({"role": "assistant", "content": msg.content or ""})
-                return msg.content or ""
+            tool_calls, content = msg.tool_calls, msg.content or ""
+            if not tool_calls:  # some free models write the call as text instead
+                tool_calls, content = recover_tool_calls(content, self.schemas)
+            if not tool_calls:
+                messages.append({"role": "assistant", "content": content})
+                return content
             messages.append({
                 "role": "assistant",
-                "content": msg.content or "",
-                "tool_calls": [tc.model_dump() for tc in msg.tool_calls],
+                "content": content,
+                "tool_calls": [tc.model_dump() for tc in tool_calls],
             })
-            for tc in msg.tool_calls:
+            for tc in tool_calls:
                 messages.append({"role": "tool", "tool_call_id": tc.id, "content": self._call(tc)})
         final = llm.chat(
             messages + [{"role": "user", "content": "Give your final answer now."}],
             tools=self.schemas, tool_choice="none", usage=self.user_db,
         ).choices[0].message
-        return final.content or ""
+        return recover_tool_calls(final.content, self.schemas)[1]  # drop any call markup
 
     def _check(self, text: str):
         build, error = extract_build(text)
