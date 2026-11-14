@@ -29,6 +29,12 @@ class Settings(BaseSettings):
         "google/gemma-4-26b-a4b-it:free",
         "nvidia/nemotron-3-super-120b-a12b:free",
     ]
+        # Tried only after every free model has failed. Put the most reliable one first.
+    paid_models: list[str] = [
+        "google/gemma-4-26b-a4b-it"
+        "openai/gpt-oss-20b",
+        "google/gemini-2.5-flash-lite"
+    ]
     vision_models: list[str] = [
         "google/gemma-4-31b-it:free",
         "nvidia/nemotron-3.5-super-vl:free",

@@ -72,20 +72,31 @@ def _recent(messages: list[dict], users: int = 2) -> list[dict]:
     head = [messages[0]] if messages and messages[0].get("role") == "system" else []
     return head + messages[max(start, len(head)):]
 
+class EmptyReply(RuntimeError):
+    pass
+
+def _attempt(model, messages, extra, kwargs):
+    resp = _client(OPENROUTER_URL, settings.openrouter_api_key).chat.completions.create(
+        model=model, messages=messages, temperature=0.3,
+        max_tokens=settings.max_tokens, **extra, **kwargs,
+    )
+    msg = resp.choices[0].message if resp.choices else None
+    if msg is None or (not msg.content and not msg.tool_calls):
+        raise EmptyReply(f"{model}: empty reply")
+    return resp
+
 
 def chat(messages, tools=None, chain=None, usage=None, max_models: int = 4, **kwargs):
-    """One chat completion with fallbacks. `usage` is an object with
-    requests_today() and add_request() (the UserDB)."""
     if usage is not None and usage.requests_today() >= settings.daily_request_budget:
-        raise BudgetExceeded("Daily model request budget reached. It resets at 00:00 UTC.")
+        # Free quota is spent: go straight to the paid models instead of stopping
+        candidates = []
+    else:
+        candidates = (chain or model_chain())[:max_models]
     extra = {"tools": tools} if tools else {}
     errors = []
-    for model in (chain or model_chain())[:max_models]:
+    for model in candidates + settings.paid_models:
         try:
-            resp = _client(OPENROUTER_URL, settings.openrouter_api_key).chat.completions.create(
-                model=model, messages=messages, temperature=0.3,
-                max_tokens=settings.max_tokens, **extra, **kwargs,
-            )
+            resp = _attempt(model, messages, extra, kwargs)
             if usage is not None:
                 usage.add_request()
             return resp
@@ -93,18 +104,16 @@ def chat(messages, tools=None, chain=None, usage=None, max_models: int = 4, **kw
             errors.append(f"{model}: rate limited")
         except APIStatusError as exc:
             if exc.status_code == 402:
-                raise RuntimeError(
-                    "OpenRouter returned 402: the credit balance is negative."
-                ) from exc
+                raise RuntimeError("OpenRouter returned 402: the credit balance is negative.") from exc
             errors.append(f"{model}: HTTP {exc.status_code}")
-        except APIConnectionError as exc:
-            errors.append(f"{model}: {exc}")
+        except (APIConnectionError, EmptyReply) as exc:
+            errors.append(str(exc))
     if settings.groq_api_key:
         log.warning("OpenRouter failed (%s); trying Groq", "; ".join(errors))
         return _client(GROQ_URL, settings.groq_api_key).chat.completions.create(
-            model=settings.groq_model, messages=_recent(messages), temperature=0.3,
+            model=settings.groq_model, messages=_recent(messages), temperature=0.3, # type: ignore
             max_tokens=min(settings.max_tokens, 2000), **extra, **kwargs,
-        )
+        ) # type: ignore
     raise RuntimeError("All models failed: " + "; ".join(errors))
 
 
